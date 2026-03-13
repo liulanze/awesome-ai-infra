@@ -6,7 +6,7 @@ Imagine FP16 -> FP8:
 
 - Memory: 1/2
 - Throughput: 2x
-- Accuracy: Drop <1%
+- Accuracy: drop <1%
 
 ## Floating-Point Basics
 
@@ -17,6 +17,8 @@ Floating-point numbers represent real numbers using three components:
 - **Mantissa/Fraction (M):** Bits determining precision (significant digits)
 
 **Formula:** `(-1)^S × (1.M) × 2^(E - bias)`
+
+_Note that subnormal numbers and special values (such as 0, ±Inf, and NaN) use different encodings and do not follow this exact form._
 
 ## FP8 Data Types
 
@@ -100,7 +102,7 @@ X * scale = [74.67, -179.2, 448.0, -119.47]  → values now use FP8 range well
 | Runtime overhead | None | Small (amax reduction per layer) |
 
 - **Static:** Scale factors are computed once using calibration data (a small representative dataset, e.g., 128–512 samples run through the model to observe actual value ranges per layer). Scales are baked into the checkpoint. Zero runtime cost.
-- **Dynamic:** Computes `amax(X)` for each tensor at runtime, so the scale always fits the actual data. More accurate, but adds an extra GPU kernel per layer. Introucing overheads.
+- **Dynamic:** Computes `amax(X)` for each tensor at runtime, so the scale always fits the actual data. More accurate, but adds an extra GPU kernel per layer. Introducing overheads.
 
 In production, **static scaling dominates**. Model providers typically release pre-quantized checkpoints (e.g., `model-fp8.safetensors`) with baked-in scales. Dynamic scaling is mainly for experimentation or when no pre-quantized checkpoint is available.
 

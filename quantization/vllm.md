@@ -1,0 +1,29 @@
+# vLLM Quantization System
+
+## Architecture
+
+vLLM is a quantization **consumer**, not producer. It loads pre-quantized checkpoints and runs inference with optimized CUDA kernels. The actual quantization process is done by tools like **llm-compressor**.
+
+## Plugin System
+
+Two abstract base classes in `base_config.py` form the core:
+
+- **`QuantizationConfig`** — reads `quantize_config.json` from the checkpoint to understand how the model was quantized
+- **`QuantizeMethodBase`** — the per-layer adapter that handles three things:
+  1. `create_weights()` — allocates the right parameter containers (e.g., packed int32 `qweight` + `scales` + `qzeros` + `g_idx` instead of a plain float16 `weight`)
+  2. `process_weights_after_loading()` — post-load transforms
+  3. `apply()` — forward pass dispatching to the correct CUDA kernel
+
+## Checkpoint Structure
+
+For a quantized model, a typical checkpoint directory looks like:
+
+```
+my-quantized-llama/
+├── model-00001-of-00003.safetensors   # packed weight tensors (qweight, scales, qzeros, ...)
+├── model-00002-of-00003.safetensors
+├── model-00003-of-00003.safetensors
+├── config.json                        # model architecture (num_layers, hidden_size, ...)
+├── quantize_config.json               # quantization metadata (bits=4, group_size=128, method="gptq")
+└── tokenizer.json                     # tokenizer
+```

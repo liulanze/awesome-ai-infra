@@ -11,8 +11,11 @@ Two abstract base classes in `base_config.py` form the core:
 - **`QuantizationConfig`** — reads `quantize_config.json` from the checkpoint to understand how the model was quantized
 - **`QuantizeMethodBase`** — the per-layer adapter that handles three things:
   1. `create_weights()` — allocates the right parameter containers (e.g., packed int32 `qweight` + `scales` + `qzeros` + `g_idx` instead of a plain float16 `weight`)
-  2. `process_weights_after_loading()` — post-load transforms
+  2. `process_weights_after_loading()` — post-load transforms (shuffling)
   3. `apply()` — forward pass dispatching to the correct CUDA kernel
+
+- **Packing** = a storage concern: fit more values into less memory
+- **Shuffling** = a performance concern: rearrange the packed values so the CUDA kernel can access them with optimal memory access patterns
 
 ## Checkpoint Structure
 

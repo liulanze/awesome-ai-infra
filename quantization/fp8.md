@@ -20,7 +20,7 @@ Floating-point numbers represent real numbers using three components:
 
 _Note that subnormal numbers and special values (such as 0, ±Inf, and NaN) use different encodings and do not follow this exact form._
 
-## FP8 Data Types
+## FP8 Data Types / Quantization Scheme
 
 | Format | Sign | Exponent | Mantissa | Dynamic Range | Precision |
 |--------|------|----------|----------|---------------|-----------|

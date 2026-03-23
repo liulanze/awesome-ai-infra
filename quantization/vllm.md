@@ -11,12 +11,13 @@ encapsulate every quantization method's differences into an unit API.
 
 Two abstract base classes in `base_config.py` form the core:
 
-- **`QuantizationConfig`** — reads `quantize_config.json` from the checkpoint to understand how the model was quantized
+- **`QuantizationConfig`** — reads `quantize_config.json` from the checkpoint to understand how the model was quantized, ONLY operates model weight.
 - **`QuantizeMethodBase`** — the per-layer adapter that handles three things:
-  1. `create_weights()` — allocates / register the right parameter containers (e.g., packed int32 `qweight` + `scales` + `qzeros` + `g_idx` instead of a plain float16 `weight`)
+  1. `create_weights()` — allocates / register the right parameter containers (e.g., packed int32 `qweight` + `scales` + `qzeros` + `g_idx` instead of a plain float16 `weight`), only for weight.
   2. `process_weights_after_loading()` — post-load transforms (shuffling to turn
-     kernel-friendly layout)
-  3. `apply()` — forward pass dispatching to the correct CUDA kernel
+     kernel-friendly layout), for weight (container/layout/pack/reorder)
+  3. `apply()` — forward pass dispatching to the correct CUDA kernel, leverage
+     weight + activation call proper kernel.
 
 - **Packing** = a storage concern: fit more values into less memory
 - **Shuffling** = a performance concern: rearrange the packed values so the CUDA kernel can access them with optimal memory access patterns

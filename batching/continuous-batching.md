@@ -38,6 +38,11 @@ Seq E (prefill):  query = 30 tokens, builds KV cache from scratch
 
 The framework flattens all tokens into one list, uses metadata to tell the attention kernel which tokens belong to which sequence, and the GPU processes them in **one kernel launch**.
 
+Each **step** is one forward pass through the model — one iteration of the
+continuous batching loop. Decode sequences get their next token, prefill chunks
+get their KV cache built for that chunk. The scheduler collects all tokens
+(decode + prefill) into a single batch, runs one forward pass, and repeats.
+
 In practice, long prefills can starve decode sequences (prefill is compute-heavy). So frameworks like vLLM use **chunked prefill** — break the prefill into smaller chunks and interleave them with decode steps:
 
 ```

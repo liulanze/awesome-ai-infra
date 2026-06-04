@@ -1,10 +1,10 @@
 """
-Single-node Prefill/Decode disaggregation simulator.
+Prefill/Decode disaggregation simulator.
 
 Prefill is compute-bound; decode is memory-bandwidth-bound. Collocated on the
 same worker, a long prefill blocks in-flight decode steps and produces ITL
-spikes (head-of-line blocking). Dedicating workers to each phase isolates
-decode cadence at the cost of a KV-cache handoff.
+spikes (head-of-line blocking). Dedicating workers (or pod groups on AKS) to
+each phase isolates decode cadence at the cost of a KV-cache handoff.
 
 Reading guide:
   - Request, RequestTrace      : per-request inputs and recorded timestamps
@@ -24,7 +24,7 @@ from typing import Iterable
 # are sufficient to expose the *ordering* effect that causes ITL spikes.
 PREFILL_TICKS_PER_TOKEN = 1
 DECODE_TICKS_PER_STEP = 1
-KV_TRANSFER_TICKS = 2          # prefill -> decode handoff cost (NVLink)
+KV_TRANSFER_TICKS = 2          # prefill -> decode handoff cost (RDMA/NCCL, cross-pod)
 
 
 @dataclass(frozen=True)

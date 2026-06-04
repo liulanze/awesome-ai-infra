@@ -9,15 +9,12 @@ either case). They differ in TTFT and orchestration:
   Push:  prefill worker sends KV layer-by-layer as it computes.
          time-to-first-decodable = max(prefill + transfer, decode_queue_wait)
 
-A one-time metadata handshake (shapes, strides, block IDs) sets up the
-transport; the session is cached so per-request overhead stays off the
-critical path.
-
 Reading guide:
-  - HandshakeMetadata          : the one-time setup payload
+  - HandshakeMetadata          : the one-time setup payload negotiated per pair
   - pull_handoff()             : serial handoff; simpler orchestration
   - push_handoff()             : per-layer overlap; lowest TTFT
-  - first_token_time_*()       : closed-form timeline for each mode
+  - TimelineCosts              : closed-form timeline inputs
+  - first_token_time_pull/push : the whiteboard question in code
 """
 
 from __future__ import annotations
@@ -26,6 +23,10 @@ from dataclasses import dataclass
 
 import torch
 import torch.distributed as dist
+
+
+PREFILL_RANK = 0
+DECODE_RANK = 1
 
 
 @dataclass(frozen=True)
@@ -39,24 +40,7 @@ class HandshakeMetadata:
     num_kv_heads: int
     head_dim: int
     block_size: int
-    block_ids: tuple[int, ...]
     dtype: torch.dtype
-
-
-PREFILL_RANK = 0
-DECODE_RANK = 1
-
-
-def exchange_handshake(meta: HandshakeMetadata, src: int, dst: int) -> None:
-    """One-time control-plane exchange. Real systems serialize via a
-    side-channel (e.g. gRPC) rather than NCCL; the cost is amortized either way.
-    """
-    if dist.get_rank() == src:
-        dist.send(torch.tensor([meta.num_layers, meta.num_kv_heads, meta.head_dim],
-                               dtype=torch.int64), dst=dst)
-    elif dist.get_rank() == dst:
-        buf = torch.empty(3, dtype=torch.int64)
-        dist.recv(buf, src=src)
 
 
 # --- Pull mode: serial; decode waits for prefill to finish, then reads ----
@@ -77,7 +61,10 @@ def pull_handoff(kv_per_layer: list[torch.Tensor], meta: HandshakeMetadata) -> N
 
 # --- Push mode: overlap; prefill streams each layer as it completes -------
 
-def push_handoff(kv_per_layer_iter, meta: HandshakeMetadata) -> None:
+def push_handoff(
+    kv_per_layer_iter: list[torch.Tensor],
+    meta: HandshakeMetadata,
+) -> None:
     """Prefill streams KV layer-by-layer as compute completes; decode begins
     receiving immediately. Per-layer transfers overlap with the next layer's
     prefill compute, hiding the transport behind compute.

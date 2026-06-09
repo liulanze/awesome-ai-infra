@@ -6,6 +6,7 @@ TP+EP: all GPUs form one TP group and serve each request in lockstep.
        on every forward pass, and KV is *replicated* across all TP ranks —
        each rank holds the same KV for the shared batch, limiting the
        effective KV pool to one GPU's worth of HBM.
+       AllReduce communication overhead is like a U-shaped curve - log2(TP).
 
 DP+EP: GPUs split into independent replicas, each serving different requests.
        No cross-replica communication; single-request latency is higher
@@ -38,7 +39,7 @@ from dataclasses import dataclass
 
 # Abstract cost constants. Absolute ticks are placeholders; the *ratios*
 # between compute gain, AllReduce cost, and KV pool size are the point.
-BASE_COMPUTE_TICKS = 100       # single-GPU forward-pass cost per request
+BASE_COMPUTE_TICKS = 100      # single-GPU forward-pass cost per request
 ALLREDUCE_TICKS_PER_STEP = 8  # AllReduce overhead per log2(tp) reduction step
 KV_BYTES_PER_REQUEST = 512    # KV footprint per in-flight request
 GPU_HBM = 8192                # total HBM per GPU (abstract units)

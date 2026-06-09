@@ -11,6 +11,7 @@ Reading guide:
   - CollocatedScheduler        : single worker; prefill ops block decode ops
   - DisaggScheduler            : separate prefill + decode workers + KV handoff
   - goodput()                  : fraction of requests meeting BOTH TTFT and ITL SLOs
+                                 SLO - Service Level Objective 你对系统性能立的"军令状" - 必须达到的硬指标。
 """
 
 from __future__ import annotations

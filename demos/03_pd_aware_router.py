@@ -24,6 +24,35 @@ Reading guide:
   - make_skewed_workload()      : test workload with mixed short/long prompts
 """
 
+"""
+2025 年 6 月,Kubernetes SIG 推出了 Gateway API Inference Extension(GAIE 或 GIE),
+现在 v1.5.0,几乎所有 LLM 平台都在用它。
+
+Client → Inference Gateway (Envoy/Istio/kgateway)
+              ↓ ext_proc gRPC 调用
+         Endpoint Picker (EPP) ← 这是个独立的 pod
+              ↓ 返回选中的 endpoint
+         Gateway 转发到选中的 vLLM pod
+
+来自 Datadog 监控指南列的 KIE(Kubernetes Inference Extension) 四种路由策略:
+| 策略                              | 用在啥场景                             | 关键指标             |
+| ------------------------------- | --------------------------------- | ---------------- |
+| **Model-aware**                 | fleet 里有多个模型版本                    | 模型分布均衡度          |
+| **LoRA adapter-aware**          | 每个 use case 用不同 fine-tune adapter | adapter 加载频率     |
+| **Prefix-aware**                | RAG/模板类高重复 prompt                 | **KV cache 命中率** |
+| **Priority + request shedding** | 交互式 + batch 混合 workload           | shedding 事件频率    |
+
+llm-d 在 GIE 基础上加了啥
+llm-d-inference-scheduler 的架构文档说得很清楚: [github.com]
+
+"llm-d Inference Scheduler 在 GIE 的 EPP 基础上扩展了 state-of-the-art 调度算法。设计支持:
+- 多个 base model 共享 cluster
+- 基于 KV cache locality、session affinity、load、model metadata 的高效路由
+- Disaggregated Prefill/Decode (P/D) 执行
+- 实验性的 Encode/Prefill/Decode (E/P/D) 执行
+- 可插拔的 filters、scorers、scrapers"
+"""
+
 from __future__ import annotations
 
 from collections import deque

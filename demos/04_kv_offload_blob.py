@@ -212,6 +212,30 @@ def serve_request(
                        prefill_cost(len(prompt_tokens)), aligned_len, 0)
 
 
+def serve_request_2(replica, prompt_tokens):
+    block_keys = []
+    for i in range(0, len(prompt_tokens), BLOCK_SIZE):
+        # 累积 hash：每个 block 的 key 包含从头到这里的所有 token
+        block_keys.append(hash(prompt_tokens[:i + BLOCK_SIZE]))
+    
+    # 从后往前找最长命中前缀
+    cached_blocks = []
+    for k in block_keys:
+        blk = replica._local.get(k) or replica.blob.get(k)
+        if blk is None:
+            break          # 第一个 miss 之后就停，后面也不会命中
+        cached_blocks.append(blk)
+    
+    hit_len = len(cached_blocks) * BLOCK_SIZE
+    miss_tokens = prompt_tokens[hit_len:]
+    
+    # 只对未命中的后半段跑 prefill
+    new_blocks = prefill(miss_tokens, prefix_kv=cached_blocks)
+    
+    # 把新算出来的 block 上传 blob
+    for k, blk in zip(block_keys[len(cached_blocks):], new_blocks):
+        replica.blob.put(k, blk)
+
 # --- Fleet simulation -------------------------------------------------------
 
 def simulate_fleet(

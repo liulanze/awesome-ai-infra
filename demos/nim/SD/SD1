@@ -1,0 +1,47 @@
+Today's the day — let's build the design foundation, then work the mocks. This first piece is the cornerstone: master it and every design question becomes assembly. I'll teach the framework, then the reusable building blocks (with the exact senior-signal phrases for each), then how to handle pushback. Then we go straight into Mock 1.
+Design Foundation Session
+The framework — the spine you run every time
+Nine beats, and in a 45-minute round you roughly spend 5 min scoping, 10 min on the high-level, 20 min on interviewer-steered deep dives, 10 min on scale/reliability/wrap:
+
+Scope & constraints first — always open here. Ask: how many models × backends × arches, request scale, SLOs (TTFT/availability), who's the user (internal teams? enterprise? air-gapped?), build cadence (day-0?). Then state your assumptions out loud. Skipping this is the #1 senior-candidate failure.
+Requirements — separate functional from non-functional (latency, throughput, cost, reliability, security) and prioritize them.
+High-level architecture — assemble the boxes from the building blocks below; draw control flow and data flow.
+Deep-dive the hard part — pick the 1–2 that actually matter; let the interviewer steer, then go deep.
+Scale & bottlenecks — "where does this break at 10×?"
+Reliability & failure modes — what fails, blast radius, rollback.
+Security & multi-tenancy — isolation, supply chain.
+Observability & day-2 ops — SLIs, upgrades, canary.
+Tradeoffs & wrap — summarize decisions and name what you'd revisit.
+
+The meta-skill: you drive. Narrate, structure, make decisions and justify them. A design round is a conversation you lead, not a Q&A you endure.
+The building blocks — learn these once, snap them together
+Each is a reusable primitive. I'm giving you the key considerations and the signature phrases that signal seniority — memorize the phrases.
+1. Control plane (CRD + Operator). The declarative brain: users declare desired NIMs via a CRD, the operator reconciles to converge (this is your coding #3). NVIDIA actually ships a NIM Operator with CRDs like NIMService/NIMCache. Considerations: CRD schema + versioning, idempotent reconcile, rollout strategy, status reporting, finalizers for cleanup.
+Say: "separate control plane from data plane," "level-triggered reconcile diffing only owned fields to avoid hot loops," "the operator is the API, Helm is just packaging."
+2. Build farm (BuildKit + cache + multi-arch). Produces the images. Parallel builders, registry-backed remote cache, multi-arch (x86 + Grace/arm), CUDA-optimized. Considerations: the build matrix (model × backend × arch × CUDA version), reproducibility, multi-stage builds, base-image/layer strategy (your coding #1).
+Say: "registry-backed BuildKit cache so cache hits survive across ephemeral runners," "multi-stage builds keep toolchains out of the runtime image," "stable layers low, volatile layers high, to maximize cache reuse and cross-image dedup," "reproducible builds via pinned digests."
+3. Artifact store (registry). Content-addressed store for images and weights. Considerations: dedup via content-addressing, GC of unreferenced blobs, geo-replication, pull-through caching, and — critically — model weights as separate artifacts, not baked into the image.
+Say: "weights are huge and versioned independently, so I store them as separate OCI artifacts or in a model registry and keep the container image small and cache-friendly," "content-addressed dedup across the whole model×backend matrix."
+4. Distribution (bits → nodes, fast). This is the cold-start bottleneck. Considerations: lazy/seekable pulling (SOCI, eStargz, nydus) so the container starts before the full pull completes; node-level weight caching (pre-pull DaemonSet, PVC, NIMCache); P2P distribution (Dragonfly/Kraken) to avoid registry hot-spotting; air-gap mirroring.
+Say: "startup is dominated by image pull + weight load, so I decouple them — lazy-pull the image and pre-stage weights on a fast local cache," "P2P distribution so a 500-replica scale-up doesn't melt the registry."
+5. Runtime placement (onto GPUs). Considerations: device plugin advertises GPUs; MIG (hard partitions, fixed profiles), time-slicing (bursty), MPS (cooperative); NVLink/topology awareness; bin-packing (your coding #6); taints/tolerations and node pools.
+Say: "match the sharing mechanism to the workload — MIG for hard isolation and predictable QoS, time-slicing for bursty low-priority, MPS for cooperative," "bin-pack to keep whole GPUs free for large models, and respect NVLink topology for multi-GPU serving."
+6. Autoscaler. Right-sizes replicas (your coding #6). Considerations: custom metric (KV-cache utilization, queue depth, or an SLO like TTFT) via a Prometheus adapter or KEDA; scale-from-zero; cluster autoscaler for nodes.
+Say: "scale on the real limiter — KV-cache utilization or queue depth — not GPU util," "scale-from-zero needs a request-triggered activator because you can't infer load at zero," "aggressive up, conservative down, because cold start is expensive."
+7. Observability. Considerations: build metrics (build time, cache-hit rate, image size); runtime SLIs (TTFT, ITL, throughput, KV-cache util, queue depth); DCGM exporter for GPU telemetry; tracing; SLOs.
+Say: "instrument the SLIs that map to user pain (TTFT, ITL) and to capacity (KV-cache, queue depth) — the capacity ones double as autoscaling signals," "measure before you optimize" (that last one is Donghan's exact wavelength).
+8. Supply-chain security. Considerations: SBOM generation, signing (cosign/sigstore), provenance/attestation (SLSA), CVE scanning, admission-time signature verification, encrypted proprietary weights.
+Say: "sign and attest at build, verify at admission — unbroken provenance from source to serving," "enterprise and air-gapped customers need SBOMs, signed images, and CVE SLAs," "encrypt proprietary weights, decrypt only inside the trusted runtime."
+Handling pushback
+When they challenge you, it's usually an invitation to go deeper, not a "gotcha." Don't get defensive. Acknowledge the tradeoff, reason to a decision, and say what you'd measure to confirm: "Fair — that trades startup latency for storage cost; I'd lean toward X because of our SLO, but I'd validate with the cache-hit rate." If you genuinely don't know something, reason from first principles out loud rather than bluffing — with Jason (ex-Meta) and Adam (principal architect), first-principles reasoning beats fake NVIDIA-specific confidence every time.
+Quick-hit vocabulary bank
+Control plane vs data plane · level-triggered reconcile · content-addressed dedup · lazy pull / seekable OCI · weights out of the image · KV-cache as the scaling signal · MIG vs time-slicing vs MPS · bin-pack to preserve whole GPUs · day-0 model availability · SBOM → sign → attest → verify · blast radius · SLO-driven · measure-then-optimize · disaggregated prefill/decode.
+
+That's the foundation. Let me lock it into your dossier, then we start Mock 1.Prioritized active learning over passive modeling demonstrationPrioritized active learning over passive modeling demonstrationMock 1 — Design the NIM Factory build pipeline
+Here's your prompt, as an interviewer would give it:
+
+"We need to take any model — the moment it drops — and turn it into a hardened, optimized, deployable NIM container, across multiple GPU architectures and inference backends, available day-0. Design that build pipeline."
+
+This is the Factory's core charter, and it's Jason's and Nicholas's territory (build-at-scale, day-0 availability). We'll run it as a real round: you drive, I play interviewer and push back.
+The single highest-value habit is the opening move, so let's practice it live rather than me handing it to you. Make your first move: give me your scoping questions and the assumptions you'd state before drawing anything. Fire them at me — I'll answer with the constraints, and we'll build the design from there, beat by beat.
+If you'd genuinely rather see me model a full exemplar answer first and then run one yourself, just say "model it" — but I'd recommend you take a swing at the scoping questions first, since that's the exact moment that separates senior candidates and it's low-risk to practice. Go ahead.
